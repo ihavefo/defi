@@ -19,7 +19,7 @@ var loantype= '';
 var RepayMemo = '';
 
 var stake_text = ''; 
-var ExpectRepay = 0; //预计还款额
+var ExpectRepay = 0; 
 
 function sendToken (from, to, quantity, memo) {
   trans.send_inline("eosio.token", "transfer", {
@@ -62,18 +62,18 @@ function stakeFalse (price, loantype, LoanSymbol, stake, stakeRate, rate, Expect
     return 0;
 }
 
-
-
 function defi (from, to, quantity, memo) {
-    var cur_time = action.publication_time;
+	// Ignor irrelevant transfer
     if (from === CONTRACT_NAME || to !== CONTRACT_NAME) {
         return;
     }
+
+	// Inital variable 
+    var cur_time = action.publication_time;
     var bAsset = quantity.split(' ');
     bAsset[0] = Number(bAsset[0]);
     var q = bAsset[0];
     var symbol = bAsset[1];
-
     var summary = db.summary(CONTRACT_NAME, CONTRACT_NAME);
     var mc = summary.find(1);
     var lenders = db.lenders(CONTRACT_NAME, CONTRACT_NAME);
@@ -85,7 +85,7 @@ function defi (from, to, quantity, memo) {
 		// check memo length
         var MM = memo.split(';');
 	    if (MM.length < 10) {
-            sendToken(CONTRACT_NAME, from, quantity, '申请失败，参数错误，返回抵押');
+            sendToken(CONTRACT_NAME, from, quantity, 'Application failed, parameter error, mortgage returned');
 	        return;
 	    }
 
@@ -118,21 +118,21 @@ function defi (from, to, quantity, memo) {
 	    }
 	    // stake asset quantity check
         if (symbol === "FO" & q < 10000) {
-            sendToken(CONTRACT_NAME, from, quantity, '抵押资产应大于等于10000FO');
+            sendToken(CONTRACT_NAME, from, quantity, 'The mortgaged assets should be greater than or equal to 10000 FO');
             return;
 	    }
         if (symbol === "FOETH" & q < 1) {
-            sendToken(CONTRACT_NAME, from, quantity, '抵押资产应大于等于1FOETH');
+            sendToken(CONTRACT_NAME, from, quantity, 'The mortgaged assets should be greater than or equal to 1 FOETH');
             return;
 	    }
         if (q !== stake) {
-            sendToken(CONTRACT_NAME, from, quantity, '抵押资产数量与合约不符！'+q+' not '+stake);
+            sendToken(CONTRACT_NAME, from, quantity, 'Quantity of mortgaged assets incorrect. '+q+' not '+stake);
             return;
 	    }
 
 		// check memo value
 		if (stakeFalse(price, loantype, LoanSymbol, stake, stakeRate, rate, ExpectLoanValue, cycle, StakeSymbol)) {
-            sendToken(CONTRACT_NAME, from, quantity, '申请失败，参数检查失败，返回抵押');
+            sendToken(CONTRACT_NAME, from, quantity, 'Application failed, parameter check failed, collateral assets returned');
 	        return;
 		}
 
@@ -161,7 +161,7 @@ function defi (from, to, quantity, memo) {
             }
             summary.emplace(CONTRACT_NAME, record);
         } else {
-            sendToken(CONTRACT_NAME, mortgagor, quantity, 'INFO: 金额与合约要求不符');
+            sendToken(CONTRACT_NAME, mortgagor, quantity, 'INFO: Amount not in accordance with contractual requirements');
             return;
 		}
 		return;
@@ -175,7 +175,7 @@ function defi (from, to, quantity, memo) {
 
 		// Check if contract is used
 		if (symbol === "FO" || symbol === "FOETH" ) {
-            sendToken(CONTRACT_NAME, mortgagor, quantity, '该合约已被使用，请重新申请借款，系统将为您分配新的合约');
+            sendToken(CONTRACT_NAME, mortgagor, quantity, 'The contract has been used, please reapply for a new loan and the system will assign you a new contract');
             return;
         }
 
@@ -209,26 +209,24 @@ function defi (from, to, quantity, memo) {
 		}
 
         if (from !== mortgagor) {
-	        /* Invest stage */
-			/* Or contract broken */
+	        /* Invest stage Or contract broken */
 	       
-            // Deny the invest if over deadline
-            // And payback motegagor and investor
+            // Deny the invest if over deadline and payback motegagor and investor
             if (cur_time > invest_deadline && cur_time <= repay_deadline) {
                 if (mc.data.status === 'staked') {
-                    sendToken(CONTRACT_NAME, mortgagor, stake_text, '认购失败，退回抵押');
+                    sendToken(CONTRACT_NAME, mortgagor, stake_text, 'Failed subscriptions, return collateral assets');
                     for (var i = 0; i < lenders.get_primary_key(); i++) {
                         var lender = lenders.find(i);
                         var payback = lender.data.invested;
                         var account = lender.data.lender;
                         lender.data.completed = 1;
                         lender.update(CONTRACT_NAME);
-                        sendToken(CONTRACT_NAME, account, payback, '认购失败，退回本金');
+                        sendToken(CONTRACT_NAME, account, payback, 'Failed subscription, return principal');
                     }
                     mc.data.completed = 1;
                     mc.data.status = 'fail';
                     mc.update(CONTRACT_NAME);
-                    sendToken(CONTRACT_NAME, from, quantity, '认购超时，退回认购款');
+                    sendToken(CONTRACT_NAME, from, quantity, 'Return of subscriptions, subscriptions expire');
                     return;
                 }
             }
@@ -248,9 +246,9 @@ function defi (from, to, quantity, memo) {
                     var account = lender.data.lender;
                     lender.data.completed = '1';
                     lender.update(CONTRACT_NAME);
-                    sendToken(CONTRACT_NAME, account, payback, '理财到期，贷款违约，按比例均分抵押资产');
+                    sendToken(CONTRACT_NAME, account, payback, 'Overdue payments, breach of contract, per investor share of collateralized assets');
                 }
-                sendToken(CONTRACT_NAME, from, quantity, '违约发生，退回触发款');
+                sendToken(CONTRACT_NAME, from, quantity, 'Breach of contract, return trigger fee');
                 mc.data.completed = '1';
                 mc.data.status = 'break';
                 mc.update(CONTRACT_NAME);
@@ -259,7 +257,7 @@ function defi (from, to, quantity, memo) {
 
             // check if invest >= ExpectLoanValue
             if (invest >= ExpectLoanValue) {
-                sendToken(CONTRACT_NAME, from, quantity, '超过认购额，退回认购款'+ExpectLoanValue);
+                sendToken(CONTRACT_NAME, from, quantity, 'Refund of subscriptions in excess of the subscribed amount '+ExpectLoanValue);
                 return;
             }
 
@@ -271,7 +269,7 @@ function defi (from, to, quantity, memo) {
 
                 // 理财认购不得超过期望认购的20%
                 if (new_invest > ExpectLoanValue*1.2) {
-                    sendToken(CONTRACT_NAME, from, quantity, '超过认购额，退回认购款');
+                    sendToken(CONTRACT_NAME, from, quantity, 'Refund of subscriptions in excess of the subscribed amount');
                     return
                 }
 
@@ -311,14 +309,14 @@ function defi (from, to, quantity, memo) {
                     const s = date.getSeconds();
 	    			const dt = Y+M+D+h+m+s;
 					if (loantype == 'b') {
-	    			    RepayMemo = '贷款释放，还款截止时间：' + dt + '，还款方式：随借随还'; 
+	    			    RepayMemo = 'Loan release, repayment deadline: ' + dt + '，Repayment method: On-demand'; 
 					} else {
-	    			    RepayMemo = '贷款释放，还款截止时间：' + dt + '，还款金额：' + mc.data.repay + ' '+LoanSymbol; 
+	    			    RepayMemo = 'Loan release, repayment deadline: ' + dt + '，Repayment amount：' + mc.data.repay + ' '+LoanSymbol; 
 					}
                     sendToken(CONTRACT_NAME, mortgagor, mc.data.got + ' '+LoanSymbol, RepayMemo);
                     if (feeRate > 0) {
                         mc.data.fee = String(fee.toFixed(6));
-                        sendToken(CONTRACT_NAME, provider, mc.data.fee + ' '+LoanSymbol, '手续费');
+                        sendToken(CONTRACT_NAME, provider, mc.data.fee + ' '+LoanSymbol, 'fee');
                     }
                 }
                 mc.update(CONTRACT_NAME);
@@ -330,11 +328,11 @@ function defi (from, to, quantity, memo) {
 			    // 超额还款退差额
                 if (q > ExpectRepay) {
 				    var overbalance = String((q - ExpectRepay).toFixed(6));
-                    sendToken(CONTRACT_NAME, mortgagor, overbalance + ' ' + LoanSymbol, 'INFO: 退回超付额'+overbalance+' '+LoanSymbol);
+                    sendToken(CONTRACT_NAME, mortgagor, overbalance + ' ' + LoanSymbol, 'INFO: refund '+overbalance+' '+LoanSymbol);
                 }
 				// 还款不足退款
                 if (q < ExpectRepay) {
-                    sendToken(CONTRACT_NAME, mortgagor, quantity, 'INFO: 低于还款额'+ExpectRepay);
+                    sendToken(CONTRACT_NAME, mortgagor, quantity, 'INFO: Less than repayment amount '+ExpectRepay);
                     return;
                 }
 				// Write table
@@ -362,11 +360,11 @@ function defi (from, to, quantity, memo) {
 					}
                     lender.data.completed = 1;
                     lender.update(CONTRACT_NAME);
-                    sendToken(CONTRACT_NAME, account, payback, '合约完成，返回本息');
+                    sendToken(CONTRACT_NAME, account, payback, 'Contract completed, return of principal and interest');
                 }
 
                 // 5. Return stake
-                sendToken(CONTRACT_NAME, mortgagor, stake_text, '合约完成，返回抵押');
+                sendToken(CONTRACT_NAME, mortgagor, stake_text, 'Contracts completed, return of collateralized assets');
                 mc.data.completed = 1;
                 mc.data.status = 'end';
                 mc.update(CONTRACT_NAME);
