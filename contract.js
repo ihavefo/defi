@@ -365,7 +365,6 @@ function defi (from, to, quantity, memo) {
 }
 
 exports.on_transfer = (from, to, quantity, memo) => {
-    console.log('Warn: action.account is ', action.account);
     if (action.account === "eosio.token") {
         defi(from, to, quantity, memo);
 	}
